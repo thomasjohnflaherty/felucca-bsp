@@ -138,29 +138,42 @@ static void ota_reply_identity(void)
     ota_send_msg(0x11, id, sizeof id);
 }
 
-/* decode the pending frame; returns its decoded length (0 = not ours) */
-static uint32_t ota_take(void)
+/* decode the pending frame; returns its decoded length (0 = not ours). With keep, a frame not in this framing stays
+ * for the firmware's handler; the next look at a frame of that length drops it, so it blocks nothing */
+static uint32_t ota_take(int keep)
 {
+    static uint32_t kept;                        /* length + 1 of the frame left in place */
     const uint8_t *p;
     uint32_t n, d, s = 0, i;
-    if (!ota_frame_get(&p, &n))
+    if (!ota_frame_get(&p, &n)) {
+        kept = 0;
         return 0;
+    }
     d = ota_unpack7(p, n, ota_dec, sizeof ota_dec);
-    ota_frame_done();
     if (d < 7u || d > sizeof ota_dec || ota_dec[0] != 0 || ota_dec[1] != 0x59 || ota_rd24(ota_dec + 3) + 7u != d)
-        return 0;
+        goto foreign;
     for (i = 6; i + 1u < d; i++)
         s += ota_dec[i];
     if ((uint8_t)~s != ota_dec[d - 1u])
-        return 0;
+        goto foreign;
+    kept = 0;
+    ota_frame_done();
     return d;
+foreign:
+    if (keep && kept != n + 1u) {
+        kept = n + 1u;
+    } else {
+        kept = 0;
+        ota_frame_done();
+    }
+    return 0;
 }
 
 /* main loop, outside a session: answer handshakes. Returns the frame's decoded length (0: none), the frame in
  * ota_dec, for a firmware's own commands in the same framing (cmd ota_dec[2], the body from ota_dec + 6) */
 static uint32_t ota_service(void)
 {
-    uint32_t d = ota_take();
+    uint32_t d = ota_take(1);
     if (d == 7u && ota_dec[2] == 0x11)
         ota_reply_identity();
     return d;
@@ -186,7 +199,7 @@ static int ota_read(uint32_t addr, uint8_t *dst, uint32_t len)
             return -1;
         for (t = ota_now_ms(); ota_now_ms() - t < ota_try_ms;) {
             ota_idle();
-            d = ota_take();
+            d = ota_take(0);
             if (!d)
                 continue;
             if (d == 7u && ota_dec[2] == 0x11) {
