@@ -139,12 +139,12 @@ static void ota_reply_identity(void)
 }
 
 /* decode the pending frame; returns its decoded length (0 = not ours). With keep, a frame not in this framing stays
- * for the firmware's handler; the next look at a frame of that length drops it, so it blocks nothing */
+ * for the firmware's handler; the next look at the same frame (length and byte sum) drops it, so it blocks nothing */
 static uint32_t ota_take(int keep)
 {
-    static uint32_t kept;                        /* length + 1 of the frame left in place */
+    static uint32_t kept;                        /* length and byte sum of the frame left in place, |1 */
     const uint8_t *p;
-    uint32_t n, d, s = 0, i;
+    uint32_t n, d, s = 0, i, k = 1;
     if (!ota_frame_get(&p, &n)) {
         kept = 0;
         return 0;
@@ -160,8 +160,11 @@ static uint32_t ota_take(int keep)
     ota_frame_done();
     return d;
 foreign:
-    if (keep && kept != n + 1u) {
-        kept = n + 1u;
+    for (i = 0; i < n; i++)
+        k += p[i];
+    k = k << 10 ^ n | 1u;
+    if (keep && kept != k) {
+        kept = k;
     } else {
         kept = 0;
         ota_frame_done();
