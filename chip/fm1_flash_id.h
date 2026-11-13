@@ -7,4 +7,5 @@
 
 #define FL_JEDEC_PUYA 0x856014u
 #define FL_JEDEC_UC   0xB36014u
-#define FL_JEDEC_OK(id) ((uint32_t)(id) == FL_JEDEC_PUYA || (uint32_t)(id) == FL_JEDEC_UC)
+static inline int fl_jedec_ok(uint32_t id) { return id == FL_JEDEC_PUYA || id == FL_JEDEC_UC; }
+#define FL_JEDEC_OK(id) fl_jedec_ok(id)   /* the id is read once (Codex u212) */
