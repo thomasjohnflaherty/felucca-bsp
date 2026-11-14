@@ -6,7 +6,10 @@
  *
  *   fm1_timer5_start(isr, prio)   OSC /4 = 6 MHz, PRD 600 -> 10 kHz, IRQ 63
  *   fm1_timer5_ack()              first thing in the ISR
- *   fm1_timer5_phase(&prd, &pend) the count into the period, PRD, and whether one is pending
+ *   fm1_timer5_count(), fm1_timer5_pending(), fm1_timer5_period()   raw reads: the count into the period (0..PRD, 6 MHz),
+ *                                 whether an interrupt is due and not yet acknowledged (CON bit 15), PRD. The count rolls over
+ *                                 with the interrupts off too: a caller that needs the count and the pending bit together reads
+ *                                 the count, the bit, the count again, and again if the count went back (fm1-base plat_tick.h)
  */
 #pragma once
 #include <stdint.h>
@@ -28,11 +31,7 @@ FM1_INLINE void fm1_timer5_start(void (*isr)(void), uint32_t prio)   /* IRQs off
 
 FM1_INLINE void fm1_timer5_ack(void) { FM1_T5_CON |= 0x4000u; }
 
-/* where TIMER5 is in its period: the count (0..PRD, 6 MHz) and PRD; *pending = 1 when an interrupt is due and not yet
- * acknowledged (CON bit 15). The period runs on through a late ISR: the ack does not restart it */
-FM1_INLINE uint32_t fm1_timer5_phase(uint32_t *prd, uint32_t *pending)
-{
-    *prd = FM1_T5_PRD;
-    *pending = (FM1_T5_CON >> 15) & 1u;
-    return FM1_T5_CNT;
-}
+/* (the period runs on through a late ISR: the ack does not restart it) */
+FM1_INLINE uint32_t fm1_timer5_count(void) { return FM1_T5_CNT; }
+FM1_INLINE uint32_t fm1_timer5_pending(void) { return (FM1_T5_CON >> 15) & 1u; }
+FM1_INLINE uint32_t fm1_timer5_period(void) { return FM1_T5_PRD; }
